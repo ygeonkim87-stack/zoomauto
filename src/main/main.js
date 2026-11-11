@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { startServer } = require('./server');
 const { runZoom } = require('./zoom');
+const { VideoStore } = require('./store');
 const { extractVideoId, extractStartSeconds } = require('../shared/youtube');
 
 // Zoom 공유 창에서 글자 인식(OCR)으로 찾으므로 영문 대문자로 둔다.
@@ -14,6 +15,8 @@ let playerReady = false;
 let serverInfo = null;
 let zoomBusy = false;
 let testStarted = false;
+let pendingSharePlay = false; // 목록에서 재생을 눌렀을 때: 영상 준비가 끝나면 공유 시작
+let store = null;
 let sharedByApp = false; // 앱이 시작한 공유인지 (영상 종료 시 자동 중지 대상)
 
 function sendToControl(channel, data) {
@@ -25,8 +28,8 @@ function playerCommand(cmd) {
 
 function createControlWindow() {
   controlWin = new BrowserWindow({
-    width: 520,
-    height: 820,
+    width: 640,
+    height: 900,
     title: '수업 영상 조작',
     webPreferences: { preload: path.join(__dirname, 'preload-control.js') },
   });
@@ -38,9 +41,9 @@ function createControlWindow() {
   });
 }
 
-function openPlayer(videoId, start) {
+function openPlayer(videoId, start, end) {
   playerReady = false;
-  const url = `${serverInfo.origin}/player.html?v=${encodeURIComponent(videoId)}&start=${start}`;
+  const url = `${serverInfo.origin}/player.html?v=${encodeURIComponent(videoId)}&start=${start || 0}&end=${end || 0}`;
   if (playerWin && !playerWin.isDestroyed()) {
     playerWin.loadURL(url);
     playerWin.show();
@@ -74,6 +77,25 @@ async function stopShare() {
   sendToControl('zoom-status', r.ok ? { state: 'stopped' } : { state: 'error', message: r.message || '공유를 멈추지 못했습니다. Zoom에서 [공유 중지]를 눌러 주세요.' });
   return r;
 }
+
+// --- 영상 목록 ---
+ipcMain.handle('videos-list', () => store.list());
+ipcMain.handle('videos-add', (_e, v) => store.add(v));
+ipcMain.handle('videos-update', (_e, id, v) => store.update(id, v));
+ipcMain.handle('videos-remove', (_e, id) => store.remove(id));
+ipcMain.handle('videos-move', (_e, id, delta) => store.move(id, delta));
+
+// 목록의 영상 하나를 열고, 준비되면 바로 Zoom 공유 + 재생
+ipcMain.handle('videos-play', (_e, id) => {
+  const v = store.get(id);
+  if (!v) return { ok: false, error: '영상을 찾을 수 없습니다.' };
+  if (zoomBusy || sharedByApp) return { ok: false, error: '다른 영상을 공유 중입니다. 먼저 [강의로 복귀]를 눌러 주세요.' };
+  const videoId = extractVideoId(v.url);
+  const start = v.start !== null && v.start !== undefined ? v.start : extractStartSeconds(v.url);
+  pendingSharePlay = true;
+  openPlayer(videoId, start, v.end);
+  return { ok: true };
+});
 
 ipcMain.handle('load-video', (_e, input) => {
   const videoId = extractVideoId(input);
@@ -124,6 +146,8 @@ ipcMain.on('player-status', (_e, status) => {
   console.log('[player-status]', JSON.stringify(status));
   if (status.state === 'ready') playerReady = true;
   sendToControl('player-status', status);
+  if (status.state === 'ready' && pendingSharePlay) { pendingSharePlay = false; sharePlay(); }
+  if (status.state === 'error') pendingSharePlay = false;
   // 영상이 끝나면 앱이 시작한 공유를 자동으로 멈춘다 (카메라 화면으로 복귀)
   if (status.state === 'ended' && sharedByApp) stopShare();
   // 자동 테스트: 준비되면 재생, 끝나면 종료
@@ -142,6 +166,7 @@ ipcMain.on('player-status', (_e, status) => {
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 app.whenReady().then(async () => {
+  store = new VideoStore(path.join(app.getPath('userData'), 'videos.json'));
   serverInfo = await startServer(path.join(__dirname, '../player'));
   createControlWindow();
   if (process.env.ZOOMAUTO_TEST_URL) {

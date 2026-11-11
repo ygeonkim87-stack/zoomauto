@@ -3,6 +3,8 @@
 const params = new URLSearchParams(location.search);
 const videoId = params.get('v');
 const startSec = Number(params.get('start')) || 0;
+const endSec = Number(params.get('end')) || 0; // 0이면 끝까지
+let endReported = false;
 const report = (s) => window.bridge && window.bridge.report(s);
 let player = null;
 
@@ -32,12 +34,14 @@ const loadTimer = setTimeout(() => {
 window.onYouTubeIframeAPIReady = function () {
   player = new YT.Player('player', {
     videoId,
-    playerVars: { start: startSec, rel: 0, playsinline: 1, origin: location.origin },
+    playerVars: { start: startSec, ...(endSec ? { end: endSec } : {}), rel: 0, playsinline: 1, origin: location.origin },
     events: {
       onReady: () => { clearTimeout(loadTimer); report({ state: 'ready', title: player.getVideoData().title }); },
       onStateChange: (e) => {
         const map = { [YT.PlayerState.PLAYING]: 'playing', [YT.PlayerState.PAUSED]: 'paused',
           [YT.PlayerState.ENDED]: 'ended', [YT.PlayerState.BUFFERING]: 'buffering' };
+        if (e.data === YT.PlayerState.PLAYING) endReported = false;
+        if (e.data === YT.PlayerState.ENDED && endReported) return;
         if (map[e.data]) report({ state: map[e.data] });
         if (e.data === YT.PlayerState.ENDED) showMessage('영상이 끝났습니다. 강의로 돌아가 주세요.');
         else if (e.data === YT.PlayerState.PLAYING) showMessage('');
@@ -50,6 +54,17 @@ window.onYouTubeIframeAPIReady = function () {
     },
   });
 };
+
+// 종료 초가 정해져 있으면 그 시점에 멈추고 '끝남'으로 알린다
+setInterval(() => {
+  if (!endSec || endReported || !player || !player.getCurrentTime) return;
+  if (player.getPlayerState() === YT.PlayerState.PLAYING && player.getCurrentTime() >= endSec) {
+    endReported = true;
+    player.pauseVideo();
+    showMessage('영상이 끝났습니다. 강의로 돌아가 주세요.');
+    report({ state: 'ended' });
+  }
+}, 250);
 
 window.bridge && window.bridge.onCommand((cmd) => {
   if (!player || !player.playVideo) return;
