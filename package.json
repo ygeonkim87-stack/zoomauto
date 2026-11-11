@@ -1,15 +1,46 @@
-﻿{
+{
   "name": "zoomauto",
+  "productName": "Zoom 수업 영상",
   "version": "0.1.0",
-  "description": "Zoom ?섏뾽 ?곸긽 ??(Windows)",
+  "description": "Zoom 수업 영상 앱 (Windows)",
+  "author": "ygeonkim87-stack",
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "com.ygeonkim87.zoomauto",
+    "productName": "Zoom 수업 영상",
+    "files": [
+      "src/**/*",
+      "!src/zoom/probe*.ps1",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "src/zoom/zoom-share.ps1"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "portable": {
+      "artifactName": "ZoomClassVideo-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "artifactName": "ZoomClassVideo-${version}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Zoom 수업 영상"
+    }
   },
   "devDependencies": {
-    "electron": "^38.8.6"
+    "electron": "^38.8.6",
+    "electron-builder": "^26.18.0"
   }
 }
-
