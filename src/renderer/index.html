@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>수업 영상 조작</title>
+<style>
+  body { margin: 0; padding: 24px; font: 20px/1.5 "Malgun Gothic", sans-serif; background: #f4f5f7; color: #1d1f23; }
+  h1 { font-size: 26px; margin: 0 0 16px; }
+  input { width: 100%; box-sizing: border-box; font-size: 20px; padding: 14px; border: 2px solid #c5c9d0; border-radius: 10px; }
+  button { width: 100%; font-size: 24px; font-weight: bold; padding: 18px; margin-top: 12px; border: 0; border-radius: 14px; cursor: pointer; color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  #load { background: #2563eb; }
+  #share { background: #7c3aed; font-size: 28px; padding: 24px; }
+  .row { display: flex; gap: 12px; }
+  #play { background: #16a34a; } #pause { background: #ca8a04; } #restart { background: #6b7280; }
+  #stopShare { background: #475569; }
+  #back { background: #dc2626; }
+  .box { margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: #fff; white-space: pre-line; }
+  .error { background: #fee2e2; color: #991b1b; }
+  .ok { background: #dcfce7; color: #166534; font-weight: bold; }
+  #manual { display: none; font-size: 17px; }
+  #manual ol { margin: 6px 0 0; padding-left: 22px; }
+</style>
+</head>
+<body>
+<h1>Zoom 수업 영상</h1>
+<input id="url" placeholder="YouTube 주소를 붙여 넣으세요">
+<button id="load">① 영상 열기</button>
+<button id="share" disabled>② Zoom 공유하며 재생</button>
+<div class="row">
+  <button id="play" disabled>▶ 재생</button>
+  <button id="pause" disabled>❚❚ 일시정지</button>
+</div>
+<div class="row">
+  <button id="restart" disabled>⟲ 처음부터</button>
+  <button id="stopShare">■ 공유 중지</button>
+</div>
+<button id="back" disabled>강의로 복귀 (공유 중지 + 영상 닫기)</button>
+<div id="zoom" class="box">Zoom: 공유하지 않음</div>
+<div id="status" class="box">YouTube 주소를 넣고 [영상 열기]를 누르세요.</div>
+<div id="manual" class="box error">
+  <b>수동으로 공유하는 방법</b>
+  <ol>
+    <li>Zoom 회의 화면 아래 [공유] 버튼을 누릅니다.</li>
+    <li>목록에서 <b>ZOOMAUTO PLAYER</b> 창을 고릅니다.</li>
+    <li>오른쪽 아래 <b>소리 공유</b>에 체크합니다.</li>
+    <li>[공유]를 누른 뒤 이 앱에서 [▶ 재생]을 누릅니다.</li>
+  </ol>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+﻿{
+  "name": "zoomauto",
+  "version": "0.1.0",
+  "description": "Zoom ?섏뾽 ?곸긽 ??(Windows)",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6"
+  }
+}
+
