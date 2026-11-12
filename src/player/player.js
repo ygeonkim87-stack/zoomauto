@@ -55,6 +55,14 @@ window.onYouTubeIframeAPIReady = function () {
   });
 };
 
+// 제목 표시줄: 마우스가 창 위쪽에 있을 때만 보인다 (위치는 앱 본체가 알려 준다)
+if (window.bridge && window.bridge.onTitlebar) {
+  window.bridge.onTitlebar((show) => document.getElementById('titlebar').classList.toggle('show', show));
+  for (const [id, cmd] of [['tbMin', 'minimize'], ['tbMax', 'maximize'], ['tbClose', 'close']]) {
+    document.getElementById(id).addEventListener('click', () => window.bridge.windowControl(cmd));
+  }
+}
+
 // 종료 초가 정해져 있으면 그 시점에 멈추고 '끝남'으로 알린다
 setInterval(() => {
   if (!endSec || endReported || !player || !player.getCurrentTime) return;

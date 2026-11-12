@@ -43,6 +43,7 @@ function createControlWindow() {
 
 function openPlayer(videoId, start, end) {
   playerReady = false;
+  titlebarShown = false; // 페이지를 새로 열면 제목 표시줄은 숨겨진 상태로 시작
   const url = `${serverInfo.origin}/player.html?v=${encodeURIComponent(videoId)}&start=${start || 0}&end=${end || 0}`;
   if (playerWin && !playerWin.isDestroyed()) {
     playerWin.loadURL(url);
@@ -53,6 +54,7 @@ function openPlayer(videoId, start, end) {
     width: 1280,
     height: 760,
     title: PLAYER_TITLE,
+    frame: false, // 제목 표시줄은 마우스를 위쪽에 올렸을 때만 페이지 안에 그린다
     backgroundColor: '#000000',
     webPreferences: { preload: path.join(__dirname, 'preload-player.js') },
   });
@@ -70,6 +72,23 @@ function openPlayer(videoId, start, end) {
   });
   playerWin.loadURL(url);
 }
+
+// 영상 창 제목 표시줄: 마우스가 창 위쪽 50px 안에 있으면 보이게 한다
+// (YouTube 화면 위에서는 페이지가 마우스 움직임을 받지 못해 본체에서 위치를 확인한다)
+let titlebarShown = false;
+setInterval(() => {
+  if (!playerWin || playerWin.isDestroyed() || playerWin.isMinimized()) return;
+  const p = screen.getCursorScreenPoint();
+  const b = playerWin.getBounds();
+  const show = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + 50;
+  if (show !== titlebarShown) { titlebarShown = show; playerWin.webContents.send('titlebar', show); }
+}, 150);
+ipcMain.on('player-window', (_e, cmd) => {
+  if (!playerWin || playerWin.isDestroyed()) return;
+  if (cmd === 'minimize') playerWin.minimize();
+  else if (cmd === 'maximize') { if (playerWin.isMaximized()) playerWin.unmaximize(); else playerWin.maximize(); }
+  else if (cmd === 'close') playerWin.close();
+});
 
 // --- 경고 띠: 자동 공유가 진행되는 동안 화면 아래에 표시 ---
 let warnWin = null;

@@ -6,11 +6,26 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   #player { width: 100%; height: 100%; }
+  /* 평소에는 숨기고, 마우스가 창 위쪽에 오면 보이는 제목 표시줄 */
+  #titlebar { display: none; position: absolute; top: 0; left: 0; right: 0; height: 36px; z-index: 10;
+    background: rgba(30, 30, 30, .92); color: #fff; font: 14px "Malgun Gothic", sans-serif;
+    align-items: center; -webkit-app-region: drag; user-select: none; }
+  #titlebar.show { display: flex; }
+  #titlebar span { flex: 1; padding-left: 12px; }
+  #titlebar button { -webkit-app-region: no-drag; width: 48px; height: 36px; border: 0; background: none; color: #fff; font-size: 15px; cursor: pointer; }
+  #titlebar button:hover { background: rgba(255, 255, 255, .18); }
+  #tbClose:hover { background: #e81123 !important; }
   #message { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
     color: #fff; font: 32px/1.5 "Malgun Gothic", sans-serif; text-align: center; padding: 40px; }
 </style>
 </head>
 <body>
+<div id="titlebar">
+  <span>ZOOMAUTO PLAYER</span>
+  <button id="tbMin" title="최소화">─</button>
+  <button id="tbMax" title="최대화">☐</button>
+  <button id="tbClose" title="닫기">✕</button>
+</div>
 <div id="player"></div>
 <div id="message"></div>
 <script src="player.js"></script>
