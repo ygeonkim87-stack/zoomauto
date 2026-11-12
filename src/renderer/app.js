@@ -1,10 +1,12 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
-const MAX = 10;
+const MAX = 20;
 const playerControls = ['play', 'pause', 'restart', 'back'];
 let videos = [];
 let editingId = null;
 let activeId = null;
+let dirty = false; // 파일로 저장한 뒤 목록을 고쳤는지
+function setDirty(v) { dirty = v; }
 
 function setBox(id, text, kind = '') {
   $(id).textContent = text;
@@ -28,6 +30,8 @@ function el(tag, props = {}, children = []) {
 
 async function refresh() {
   videos = await window.app.videos.list();
+  const name = await window.app.videos.name();
+  $('fileName').textContent = '저장 파일: ' + (name ? name + (dirty ? ' (수정됨 · 저장 안 함)' : '') : '(저장 안 됨)');
   $('count').textContent = `(${videos.length}/${MAX})`;
   $('addBtn').disabled = videos.length >= MAX;
   const list = $('list');
@@ -45,8 +49,8 @@ async function refresh() {
       return b;
     };
     const play = tool('▶ 공유 재생', () => playVideo(v), 'playBtn');
-    const up = tool('▲', async () => { await window.app.videos.move(v.id, -1); refresh(); });
-    const down = tool('▼', async () => { await window.app.videos.move(v.id, 1); refresh(); });
+    const up = tool('▲', async () => { await window.app.videos.move(v.id, -1); setDirty(true); refresh(); });
+    const down = tool('▼', async () => { await window.app.videos.move(v.id, 1); setDirty(true); refresh(); });
     up.disabled = i === 0; down.disabled = i === videos.length - 1;
     const tools = el('div', { className: 'tools' }, [
       up,
@@ -54,6 +58,7 @@ async function refresh() {
       tool('삭제', async () => {
         if (!confirm(`"${v.title}"을(를) 목록에서 지울까요?`)) return;
         await window.app.videos.remove(v.id);
+        setDirty(true);
         refresh();
       }, 'small del'),
       down,
@@ -79,6 +84,26 @@ async function playVideo(v) {
   refresh();
   setStatus(`"${v.title}" 영상을 준비하는 중입니다…\n준비되면 Zoom 공유를 자동으로 시작합니다.`);
 }
+
+// --- 목록 파일 저장/불러오기 ---
+$('saveFile').addEventListener('click', async () => {
+  const r = await window.app.videos.exportFile();
+  if (r.canceled) return;
+  if (!r.ok) return setStatus(r.error, 'error');
+  setDirty(false);
+  await refresh();
+  setStatus(`목록을 "${r.name}" 파일로 저장했습니다.`, 'ok');
+});
+$('openFile').addEventListener('click', async () => {
+  if (videos.length && !confirm('불러오면 지금 목록이 불러온 목록으로 바뀝니다. 계속할까요?')) return;
+  const r = await window.app.videos.importFile();
+  if (r.canceled) return;
+  if (!r.ok) return setStatus(r.error, 'error');
+  setDirty(false);
+  activeId = null;
+  await refresh();
+  setStatus(`"${r.name}" 목록을 불러왔습니다. (영상 ${r.count}개)`, 'ok');
+});
 
 // --- 등록/수정 폼 ---
 function openForm(v) {
@@ -106,6 +131,7 @@ $('save').addEventListener('click', async () => {
     return;
   }
   closeForm();
+  setDirty(true);
   refresh();
 });
 
@@ -119,7 +145,9 @@ $('back').addEventListener('click', () => window.app.command('close'));
 window.app.onZoomStatus((s) => {
   switch (s.state) {
     case 'starting': setBox('zoom', 'Zoom: 공유를 시작하는 중… (마우스를 움직이지 마세요)'); break;
-    case 'sharing': setBox('zoom', 'Zoom: 영상 창을 소리와 함께 공유 중', 'ok'); break;
+    case 'sharing':
+      setBox('zoom', 'Zoom: 영상 창을 소리와 함께 공유 중' + (s.optimized ? '' : '\n("비디오 공유에 최적화"는 켜지 못했습니다. 영상이 끊기면 Zoom 공유 창에서 직접 체크해 주세요.)'), 'ok');
+      break;
     case 'stopping': setBox('zoom', 'Zoom: 공유를 멈추는 중…'); break;
     case 'stopped': setBox('zoom', 'Zoom: 공유를 멈췄습니다. 카메라 화면으로 돌아왔습니다.'); break;
     case 'error':

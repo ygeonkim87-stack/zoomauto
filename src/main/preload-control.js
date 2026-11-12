@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('app', {
   zoomStop: () => ipcRenderer.invoke('zoom-stop'),
   videos: {
     list: () => ipcRenderer.invoke('videos-list'),
+    name: () => ipcRenderer.invoke('videos-name'),
+    exportFile: () => ipcRenderer.invoke('videos-export'),
+    importFile: () => ipcRenderer.invoke('videos-import'),
     add: (v) => ipcRenderer.invoke('videos-add', v),
     update: (id, v) => ipcRenderer.invoke('videos-update', id, v),
     remove: (id) => ipcRenderer.invoke('videos-remove', id),

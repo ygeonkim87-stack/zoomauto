@@ -288,13 +288,24 @@ try {
         Start-Sleep -Milliseconds 400
         if (-not (Test-Checked $sound)) { Close-ShareDialog; throw 'SOUND_CHECK_FAILED' }
       }
+      # '비디오 공유에 최적화'도 체크한다 (영상 끊김 방지). 실패해도 공유는 계속 진행한다.
+      $optimized = $false
+      $opt = Find-Text $lines @('비디오 공유에 최적화', 'Optimize for video sharing')
+      if ($opt) {
+        if (-not (Test-Checked $opt)) {
+          # 줄 끝의 (?) 도움말 아이콘을 피하려고 글자 앞쪽 1/3 지점을 누른다
+          [ZW]::Click($opt.x + [int]($opt.w / 3), $opt.y + [int]($opt.h / 2))
+          Start-Sleep -Milliseconds 400
+        }
+        $optimized = [bool](Test-Checked $opt)
+      }
       [ZW]::Click($btn.x + [int]($btn.w / 2), $btn.y + [int]($btn.h / 2))
       for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Milliseconds 300
         if (Test-Sharing) { break }
       }
       $sharing = Test-Sharing
-      Out-Result @{ ok = $sharing; sharing = $sharing; soundClicked = $soundClicked; error = $(if ($sharing) { $null } else { 'SHARE_NOT_CONFIRMED' }) }
+      Out-Result @{ ok = $sharing; sharing = $sharing; soundClicked = $soundClicked; optimized = $optimized; error = $(if ($sharing) { $null } else { 'SHARE_NOT_CONFIRMED' }) }
     }
     'stop' {
       if (-not (Test-Sharing)) { Out-Result @{ ok = $true; sharing = $false; note = 'NOT_SHARING' }; break }

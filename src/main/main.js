@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { startServer } = require('./server');
 const { runZoom } = require('./zoom');
@@ -80,6 +80,31 @@ async function stopShare() {
 
 // --- 영상 목록 ---
 ipcMain.handle('videos-list', () => store.list());
+ipcMain.handle('videos-name', () => store.name);
+
+const FILTERS = [{ name: '영상 목록', extensions: ['json'] }];
+// 현재 목록을 이름을 정해 파일로 저장
+ipcMain.handle('videos-export', async () => {
+  const r = await dialog.showSaveDialog(controlWin, {
+    title: '영상 목록 저장',
+    defaultPath: path.join(app.getPath('documents'), (store.name || '영상 목록') + '.json'),
+    filters: FILTERS,
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { return store.exportTo(r.filePath); } catch (e) { return { ok: false, error: '저장하지 못했습니다: ' + e.message }; }
+});
+// 저장해 둔 목록 파일 불러오기 (현재 목록을 바꿈)
+ipcMain.handle('videos-import', async () => {
+  if (zoomBusy || sharedByApp) return { ok: false, error: '영상을 공유 중입니다. 먼저 [강의로 복귀]를 눌러 주세요.' };
+  const r = await dialog.showOpenDialog(controlWin, {
+    title: '영상 목록 불러오기',
+    defaultPath: app.getPath('documents'),
+    filters: FILTERS,
+    properties: ['openFile'],
+  });
+  if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
+  return store.importFrom(r.filePaths[0]);
+});
 ipcMain.handle('videos-add', (_e, v) => store.add(v));
 ipcMain.handle('videos-update', (_e, id, v) => store.update(id, v));
 ipcMain.handle('videos-remove', (_e, id) => store.remove(id));
@@ -133,7 +158,7 @@ async function sharePlay() {
     return r;
   }
   sharedByApp = true;
-  sendToControl('zoom-status', { state: 'sharing' });
+  sendToControl('zoom-status', { state: 'sharing', optimized: r.optimized !== false });
   // 공유 화면이 참가자에게 뜰 시간을 조금 준 뒤 재생
   setTimeout(() => playerCommand('restart'), 1500);
   return r;

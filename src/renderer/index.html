@@ -14,6 +14,8 @@
   button:disabled { opacity: .4; cursor: default; }
   .small { background: #e5e7eb; color: #1f2937; padding: 8px 12px; font-size: 16px; border-radius: 10px; }
   #addBtn { background: #2563eb; }
+  .filebar { display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; }
+  #fileName { flex: 1; min-width: 0; font-weight: bold; color: #4c1d95; overflow-wrap: anywhere; }
 
   #list { display: flex; flex-direction: column; gap: 10px; }
   .item { display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 14px; padding: 12px; border: 3px solid transparent; }
@@ -51,6 +53,11 @@
   <h1>수업 영상 <span class="count" id="count"></span></h1>
   <button id="addBtn">+ 영상 등록</button>
 </div>
+<div class="filebar">
+  <div id="fileName">저장 파일: (저장 안 됨)</div>
+  <button id="saveFile" class="small">💾 목록 저장</button>
+  <button id="openFile" class="small">📂 불러오기</button>
+</div>
 
 <div id="form">
   <b id="formTitle">영상 등록</b>
@@ -84,7 +91,7 @@
   <ol>
     <li>Zoom 회의 화면 아래 [공유] 버튼을 누릅니다.</li>
     <li>목록에서 <b>ZOOMAUTO PLAYER</b> 창을 고릅니다.</li>
-    <li>오른쪽 아래 <b>소리 공유</b>에 체크합니다.</li>
+    <li>오른쪽 아래 <b>소리 공유</b>와 <b>비디오 공유에 최적화</b>에 체크합니다.</li>
     <li>[공유]를 누른 뒤 이 앱에서 [▶ 재생]을 누릅니다.</li>
   </ol>
 </div>
