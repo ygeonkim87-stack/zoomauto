@@ -1,7 +1,7 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 const MAX = 20;
-const playerControls = ['play', 'pause', 'restart', 'back'];
+const playerControls = ['play', 'pause', 'restart']; // [강의로 복귀]는 항상 누를 수 있다
 let videos = [];
 let editingId = null;
 let activeId = null;
@@ -105,6 +105,16 @@ $('openFile').addEventListener('click', async () => {
   setStatus(`"${r.name}" 목록을 불러왔습니다. (영상 ${r.count}개)`, 'ok');
 });
 
+$('resetList').addEventListener('click', async () => {
+  if (!videos.length) return setStatus('지울 영상이 없습니다.');
+  if (!confirm(`등록한 영상 ${videos.length}개를 모두 지울까요?\n파일로 저장해 둔 목록은 지워지지 않습니다.`)) return;
+  await window.app.videos.clear();
+  setDirty(false);
+  activeId = null;
+  await refresh();
+  setStatus('영상 목록을 모두 지웠습니다.');
+});
+
 // --- 등록/수정 폼 ---
 function openForm(v) {
   editingId = v ? v.id : null;
@@ -149,7 +159,9 @@ window.app.onZoomStatus((s) => {
       setBox('zoom', 'Zoom: 영상 창을 소리와 함께 공유 중' + (s.optimized ? '' : '\n("비디오 공유에 최적화"는 켜지 못했습니다. 영상이 끊기면 Zoom 공유 창에서 직접 체크해 주세요.)'), 'ok');
       break;
     case 'stopping': setBox('zoom', 'Zoom: 공유를 멈추는 중…'); break;
-    case 'stopped': setBox('zoom', 'Zoom: 공유를 멈췄습니다. 카메라 화면으로 돌아왔습니다.'); break;
+    case 'stopped':
+      setBox('zoom', s.external ? 'Zoom: 공유가 멈춘 것을 확인해 영상을 일시정지했습니다.' : 'Zoom: 공유를 멈췄습니다. 카메라 화면으로 돌아왔습니다.');
+      break;
     case 'error':
       setBox('zoom', 'Zoom: ' + s.message + (s.manual ? '\n영상은 재생하지 않았습니다.' : ''), 'error');
       if (s.manual) showManual(true);

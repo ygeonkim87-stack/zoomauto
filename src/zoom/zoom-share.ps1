@@ -23,6 +23,20 @@ public class ZW {
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   public struct RECT { public int L, T, R, B; }
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  // 지정한 프로세스들의 '보이는' 최상위 창을 "핸들|클래스" 목록으로 돌려준다
+  public static System.Collections.Generic.List<string> Visible(uint[] pids) {
+    var set = new System.Collections.Generic.HashSet<uint>(pids);
+    var r = new System.Collections.Generic.List<string>();
+    EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
+      if (set.Contains(p) && IsWindowVisible(h)) { var c = new System.Text.StringBuilder(256); GetClassName(h, c, 256); r.Add(h.ToInt64() + "|" + c); }
+      return true; }, IntPtr.Zero);
+    return r;
+  }
   public static void Click(int x, int y) { SetCursorPos(x, y); mouse_event(2,0,0,0,IntPtr.Zero); mouse_event(4,0,0,0,IntPtr.Zero); }
 }
 "@
@@ -39,7 +53,12 @@ function Get-ZoomWindows {
   @($Root.FindAll('Children', [System.Windows.Automation.Condition]::TrueCondition) |
     Where-Object { $pids -contains $_.Current.ProcessId })
 }
-function Find-ZoomWindow($class) { Get-ZoomWindows | Where-Object { $_.Current.ClassName -eq $class } | Select-Object -First 1 }
+# UI Automation의 창 목록은 가끔 창을 놓치므로 Win32로 찾은 핸들에서 요소를 만든다
+function Find-ZoomWindow($class) {
+  $w = Get-VisibleZoom | Where-Object { $_.class -eq $class } | Select-Object -First 1
+  if (-not $w) { return $null }
+  try { $A::FromHandle($w.handle) } catch { $null }
+}
 
 function Get-Rect($el) {
   $r = New-Object ZW+RECT
@@ -217,12 +236,15 @@ function Open-ShareDialog {
   if ($dlg) { return $dlg }
   $meet = Find-ZoomWindow 'ConfMultiTabContentWndClass'
   if (-not $meet) { throw 'NO_MEETING' }
-  Focus-Window $meet
-  [System.Windows.Forms.SendKeys]::SendWait('%s')
-  for ($i = 0; $i -lt 20; $i++) {
-    Start-Sleep -Milliseconds 250
-    $dlg = Find-ZoomWindow $ShareDialogClass
-    if ($dlg) { Start-Sleep -Milliseconds 700; return $dlg }
+  # 다른 창에 포커스를 뺏기면 단축키가 안 먹으므로 최대 3번 시도한다
+  for ($try = 0; $try -lt 3; $try++) {
+    Focus-Window $meet
+    [System.Windows.Forms.SendKeys]::SendWait('%s')
+    for ($i = 0; $i -lt 12; $i++) {
+      Start-Sleep -Milliseconds 250
+      $dlg = Find-ZoomWindow $ShareDialogClass
+      if ($dlg) { Start-Sleep -Milliseconds 700; return $dlg }
+    }
   }
   throw 'SHARE_DIALOG_NOT_OPENED'
 }
@@ -234,16 +256,23 @@ function Close-ShareDialog {
 
 # 공유 중이면 회의 창과 다른 Zoom 창(공유 툴바 등)이 생긴다. 실제 판정 기준은 status로 확인해 정한다.
 # Zoom 7.1.9에서 확인: 공유 중에는 'ZPFloatToolbarClass'(화면 공유 회의 컨트롤) 창이 생긴다
-$SharingClasses = @('ZPFloatToolbarClass')
-function Test-Sharing {
-  $classes = Get-ZoomWindows | ForEach-Object { $_.Current.ClassName }
-  [bool]($classes | Where-Object { $SharingClasses -contains $_ })
+# '새 공유' 창이 떠 있는 동안에는 툴바가 숨겨지므로 주석 창(ZoomAnnoWindowWndClass)도 함께 본다
+$SharingClasses = @('ZPFloatToolbarClass', 'ZoomAnnoWindowWndClass')
+# 보이는 Zoom 창을 Win32로 직접 센다 (UI Automation은 공유 툴바를 놓칠 때가 있다)
+function Get-VisibleZoom {
+  $pids = [uint32[]]@(Get-Process -Name Zoom -ErrorAction SilentlyContinue | ForEach-Object Id)
+  if (-not $pids.Count) { return @() }
+  @([ZW]::Visible($pids) | ForEach-Object { $p = $_.Split('|'); [pscustomobject]@{ handle = [IntPtr][int64]$p[0]; class = $p[1] } })
 }
+function Test-Sharing {
+  [bool](Get-VisibleZoom | Where-Object { $SharingClasses -contains $_.class })
+}
+function Get-HandleRect($h) { $r = New-Object ZW+RECT; [ZW]::GetWindowRect($h, [ref]$r) | Out-Null; $r }
 
 try {
   switch ($Action) {
     'status' {
-      $list = Get-ZoomWindows | ForEach-Object { "$($_.Current.ClassName) | $($_.Current.Name)" }
+      $list = @(Get-VisibleZoom | ForEach-Object { $_.class })
       $list | ForEach-Object { "  $_" }
       Out-Result @{ ok = $true; sharing = (Test-Sharing); windows = $list }
     }
@@ -300,7 +329,8 @@ try {
         $optimized = [bool](Test-Checked $opt)
       }
       [ZW]::Click($btn.x + [int]($btn.w / 2), $btn.y + [int]($btn.h / 2))
-      for ($i = 0; $i -lt 20; $i++) {
+      # 비디오 최적화를 켜면 공유 시작이 느려질 수 있어 최대 20초까지 기다린다
+      for ($i = 0; $i -lt 66; $i++) {
         Start-Sleep -Milliseconds 300
         if (Test-Sharing) { break }
       }
@@ -309,14 +339,36 @@ try {
     }
     'stop' {
       if (-not (Test-Sharing)) { Out-Result @{ ok = $true; sharing = $false; note = 'NOT_SHARING' }; break }
-      # 공유 중에는 회의 창이 사라지고 공유 툴바만 남는다. 툴바에 포커스를 준 뒤 Alt+S
-      $bar = Find-ZoomWindow 'ZPFloatToolbarClass'
-      if (-not $bar) { $bar = Find-ZoomWindow 'ConfMultiTabContentWndClass' }
-      if ($bar) { Focus-Window $bar }
-      [System.Windows.Forms.SendKeys]::SendWait('%s')
-      for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Milliseconds 250; if (-not (Test-Sharing)) { break } }
+      # 이전 시도로 '새 공유' 창이 열려 있으면 먼저 닫는다 (닫아야 공유 툴바가 다시 나타난다)
+      if (Find-ZoomWindow $ShareDialogClass) {
+        Close-ShareDialog
+        for ($i = 0; $i -lt 12; $i++) { Start-Sleep -Milliseconds 250; if (Find-ZoomWindow 'ZPFloatToolbarClass') { break } }
+      }
+      $method = 'none'
+      # 1) 공유 툴바의 [공유 중지] 버튼을 글자 인식으로 찾아 누른다
+      foreach ($w in (Get-VisibleZoom | Where-Object { $_.class -match 'Tool[Bb]ar' })) {
+        $r = Get-HandleRect $w.handle
+        if (($r.R - $r.L) -lt 50 -or ($r.B - $r.T) -lt 10) { continue }
+        $lines = @(Invoke-Ocr $r)
+        $stopBtn = Find-Text $lines @('공유 중지', 'Stop share') 0.6
+        if ($stopBtn) {
+          [ZW]::Click($stopBtn.x + [int]($stopBtn.w / 2), $stopBtn.y + [int]($stopBtn.h / 2))
+          $method = 'button'
+          for ($i = 0; $i -lt 16; $i++) { Start-Sleep -Milliseconds 250; if (-not (Test-Sharing)) { break } }
+          break
+        }
+      }
+      # 2) 그래도 공유 중이면 Alt+S를 시도하고, '새 공유' 창이 열리면 닫는다
+      if (Test-Sharing) {
+        $bar = Find-ZoomWindow 'ZPFloatToolbarClass'
+        if ($bar) { Focus-Window $bar }
+        [System.Windows.Forms.SendKeys]::SendWait('%s')
+        $method = 'hotkey'
+        for ($i = 0; $i -lt 12; $i++) { Start-Sleep -Milliseconds 250; if (Find-ZoomWindow $ShareDialogClass) { break } }
+        if (Find-ZoomWindow $ShareDialogClass) { Close-ShareDialog; Start-Sleep -Milliseconds 500 }
+      }
       $sharing = Test-Sharing
-      Out-Result @{ ok = (-not $sharing); sharing = $sharing }
+      Out-Result @{ ok = (-not $sharing); sharing = $sharing; method = $method }
     }
   }
 } catch {

@@ -62,12 +62,17 @@ function openPlayer(videoId, start, end) {
   playerWin.on('closed', () => {
     playerWin = null;
     playerReady = false;
+    pendingSharePlay = false;
     sendToControl('player-status', { state: 'closed' });
+    // 공유 중에 영상 창을 직접 닫았으면 공유도 멈춘다
+    if (sharedByApp) stopShare();
   });
   playerWin.loadURL(url);
 }
 
 async function stopShare() {
+  // 상태 확인 같은 짧은 작업이 진행 중이면 끝날 때까지 잠깐 기다린다
+  for (let i = 0; i < 25 && zoomBusy; i++) await new Promise((r) => setTimeout(r, 200));
   if (zoomBusy) return { ok: false, error: 'BUSY', message: 'Zoom 작업이 진행 중입니다. 잠시 후 다시 눌러 주세요.' };
   zoomBusy = true;
   sendToControl('zoom-status', { state: 'stopping' });
@@ -81,6 +86,7 @@ async function stopShare() {
 // --- 영상 목록 ---
 ipcMain.handle('videos-list', () => store.list());
 ipcMain.handle('videos-name', () => store.name);
+ipcMain.handle('videos-clear', () => store.clear());
 
 const FILTERS = [{ name: '영상 목록', extensions: ['json'] }];
 // 현재 목록을 이름을 정해 파일로 저장
@@ -111,10 +117,12 @@ ipcMain.handle('videos-remove', (_e, id) => store.remove(id));
 ipcMain.handle('videos-move', (_e, id, delta) => store.move(id, delta));
 
 // 목록의 영상 하나를 열고, 준비되면 바로 Zoom 공유 + 재생
-ipcMain.handle('videos-play', (_e, id) => {
+ipcMain.handle('videos-play', async (_e, id) => {
   const v = store.get(id);
   if (!v) return { ok: false, error: '영상을 찾을 수 없습니다.' };
-  if (zoomBusy || sharedByApp) return { ok: false, error: '다른 영상을 공유 중입니다. 먼저 [강의로 복귀]를 눌러 주세요.' };
+  if (zoomBusy) return { ok: false, error: 'Zoom 작업이 진행 중입니다. 잠시 후 다시 눌러 주세요.' };
+  // 다른 영상을 공유 중이면 그 공유를 먼저 멈추고 새 영상으로 넘어간다
+  if (sharedByApp) await stopShare();
   const videoId = extractVideoId(v.url);
   const start = v.start !== null && v.start !== undefined ? v.start : extractStartSeconds(v.url);
   pendingSharePlay = true;
@@ -130,7 +138,11 @@ ipcMain.handle('load-video', (_e, input) => {
 });
 
 ipcMain.handle('player-command', async (_e, command) => {
-  if (!playerWin || playerWin.isDestroyed()) return { ok: false, error: '영상 창이 열려 있지 않습니다.' };
+  if (!playerWin || playerWin.isDestroyed()) {
+    // 영상 창이 이미 닫혔어도 [강의로 복귀]는 공유를 멈추고 상태를 정리한다
+    if (command === 'close') { await stopShare(); return { ok: true }; }
+    return { ok: false, error: '영상 창이 열려 있지 않습니다.' };
+  }
   if (command === 'close') {
     playerCommand('pause');
     if (sharedByApp) await stopShare();
@@ -165,6 +177,19 @@ async function sharePlay() {
 }
 
 ipcMain.handle('zoom-stop', () => stopShare());
+
+// 강사가 Zoom에서 직접 공유를 멈췄는지 주기적으로 확인한다
+setInterval(async () => {
+  if (!sharedByApp || zoomBusy) return;
+  zoomBusy = true;
+  const r = await runZoom('status');
+  zoomBusy = false;
+  if (sharedByApp && r.ok && r.sharing === false) {
+    sharedByApp = false;
+    playerCommand('pause');
+    sendToControl('zoom-status', { state: 'stopped', external: true });
+  }
+}, 4000);
 
 // 플레이어 페이지에서 오는 상태 보고를 조작 화면으로 전달
 ipcMain.on('player-status', (_e, status) => {

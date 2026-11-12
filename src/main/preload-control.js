@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('app', {
   videos: {
     list: () => ipcRenderer.invoke('videos-list'),
     name: () => ipcRenderer.invoke('videos-name'),
+    clear: () => ipcRenderer.invoke('videos-clear'),
     exportFile: () => ipcRenderer.invoke('videos-export'),
     importFile: () => ipcRenderer.invoke('videos-import'),
     add: (v) => ipcRenderer.invoke('videos-add', v),

@@ -105,6 +105,14 @@ class VideoStore {
     return { ok: true };
   }
 
+  // 등록한 영상을 모두 지운다
+  clear() {
+    this.videos = [];
+    this.name = '';
+    this.save();
+    return { ok: true };
+  }
+
   move(id, delta) {
     const i = this.videos.findIndex((v) => v.id === id);
     const j = i + delta;

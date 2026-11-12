@@ -20,7 +20,7 @@ function runZoom(action) {
   return new Promise((resolve) => {
     execFile('powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Action', action],
-      { timeout: 60000, windowsHide: true },
+      { timeout: 90000, windowsHide: true },
       (err, stdout) => {
         const lines = String(stdout || '').trim().split(/\r?\n/);
         let result;
