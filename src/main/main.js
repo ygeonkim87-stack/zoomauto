@@ -251,7 +251,12 @@ ipcMain.on('player-status', (_e, status) => {
   // 영상이 실제로 재생되기 시작하면 경고 띠를 내린다
   if (status.state === 'playing' && !zoomBusy) hideWarning();
   // 영상이 끝나면 앱이 시작한 공유를 자동으로 멈춘다 (카메라 화면으로 복귀)
-  if (status.state === 'ended' && sharedByApp) stopShare();
+  // 그다음 영상 창도 닫아서 강사가 따로 끌 필요가 없게 한다
+  if (status.state === 'ended') {
+    (sharedByApp ? stopShare() : Promise.resolve()).then(() => {
+      if (playerWin && !playerWin.isDestroyed()) playerWin.close();
+    });
+  }
   // 자동 테스트: 준비되면 재생, 끝나면 종료
   if (process.env.ZOOMAUTO_TEST_URL && !process.env.ZOOMAUTO_TEST_NOPLAY) {
     // ZOOMAUTO_TEST_SHARE=1 이면 Zoom 공유 흐름 전체를 시험한다
@@ -275,7 +280,7 @@ app.whenReady().then(async () => {
     const input = process.env.ZOOMAUTO_TEST_URL;
     const id = extractVideoId(input);
     console.log('[test] videoId', id);
-    if (id) openPlayer(id, extractStartSeconds(input));
+    if (id) openPlayer(id, extractStartSeconds(input), Number(process.env.ZOOMAUTO_TEST_END) || 0);
   }
 });
 

@@ -345,27 +345,27 @@ try {
         for ($i = 0; $i -lt 12; $i++) { Start-Sleep -Milliseconds 250; if (Find-ZoomWindow 'ZPFloatToolbarClass') { break } }
       }
       $method = 'none'
-      # 1) 공유 툴바의 [공유 중지] 버튼을 글자 인식으로 찾아 누른다
-      foreach ($w in (Get-VisibleZoom | Where-Object { $_.class -match 'Tool[Bb]ar' })) {
-        $r = Get-HandleRect $w.handle
-        if (($r.R - $r.L) -lt 50 -or ($r.B - $r.T) -lt 10) { continue }
-        $lines = @(Invoke-Ocr $r)
-        $stopBtn = Find-Text $lines @('공유 중지', 'Stop share') 0.6
-        if ($stopBtn) {
-          [ZW]::Click($stopBtn.x + [int]($stopBtn.w / 2), $stopBtn.y + [int]($stopBtn.h / 2))
-          $method = 'button'
-          for ($i = 0; $i -lt 16; $i++) { Start-Sleep -Milliseconds 250; if (-not (Test-Sharing)) { break } }
-          break
-        }
-      }
-      # 2) 그래도 공유 중이면 Alt+S를 시도하고, '새 공유' 창이 열리면 닫는다
+      # 1) Alt+S (빠름). 공유가 멈추지 않고 '새 공유' 창이 열리면 닫는다
+      $bar = Find-ZoomWindow 'ZPFloatToolbarClass'
+      if ($bar) { Focus-Window $bar }
+      [System.Windows.Forms.SendKeys]::SendWait('%s')
+      $method = 'hotkey'
+      for ($i = 0; $i -lt 12; $i++) { Start-Sleep -Milliseconds 250; if (-not (Test-Sharing) -or (Find-ZoomWindow $ShareDialogClass)) { break } }
+      if (Find-ZoomWindow $ShareDialogClass) { Close-ShareDialog; Start-Sleep -Milliseconds 500 }
+      # 2) 그래도 공유 중이면 공유 툴바의 [공유 중지] 버튼을 글자 인식으로 찾아 누른다
       if (Test-Sharing) {
-        $bar = Find-ZoomWindow 'ZPFloatToolbarClass'
-        if ($bar) { Focus-Window $bar }
-        [System.Windows.Forms.SendKeys]::SendWait('%s')
-        $method = 'hotkey'
-        for ($i = 0; $i -lt 12; $i++) { Start-Sleep -Milliseconds 250; if (Find-ZoomWindow $ShareDialogClass) { break } }
-        if (Find-ZoomWindow $ShareDialogClass) { Close-ShareDialog; Start-Sleep -Milliseconds 500 }
+        foreach ($w in (Get-VisibleZoom | Where-Object { $_.class -match 'Tool[Bb]ar' })) {
+          $r = Get-HandleRect $w.handle
+          if (($r.R - $r.L) -lt 50 -or ($r.B - $r.T) -lt 10) { continue }
+          $lines = @(Invoke-Ocr $r)
+          $stopBtn = Find-Text $lines @('공유 중지', 'Stop share') 0.6
+          if ($stopBtn) {
+            [ZW]::Click($stopBtn.x + [int]($stopBtn.w / 2), $stopBtn.y + [int]($stopBtn.h / 2))
+            $method = 'button'
+            for ($i = 0; $i -lt 16; $i++) { Start-Sleep -Milliseconds 250; if (-not (Test-Sharing)) { break } }
+            break
+          }
+        }
       }
       $sharing = Test-Sharing
       Out-Result @{ ok = (-not $sharing); sharing = $sharing; method = $method }
