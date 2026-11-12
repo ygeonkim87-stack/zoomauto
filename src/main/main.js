@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const { startServer } = require('./server');
 const { runZoom } = require('./zoom');
@@ -63,11 +63,39 @@ function openPlayer(videoId, start, end) {
     playerWin = null;
     playerReady = false;
     pendingSharePlay = false;
+    hideWarning();
     sendToControl('player-status', { state: 'closed' });
     // 공유 중에 영상 창을 직접 닫았으면 공유도 멈춘다
     if (sharedByApp) stopShare();
   });
   playerWin.loadURL(url);
+}
+
+// --- 경고 띠: 자동 공유가 진행되는 동안 화면 아래에 표시 ---
+let warnWin = null;
+let warnTimer = null;
+function showWarning() {
+  hideWarning();
+  const { workArea } = screen.getPrimaryDisplay();
+  const height = 150;
+  warnWin = new BrowserWindow({
+    x: workArea.x, y: workArea.y + workArea.height - height, width: workArea.width, height,
+    frame: false, resizable: false, movable: false, focusable: false, skipTaskbar: true,
+    alwaysOnTop: true, show: false, backgroundColor: '#dc2626', type: 'toolbar',
+  });
+  warnWin.setAlwaysOnTop(true, 'screen-saver');
+  // 클릭은 아래 창으로 통과시키고, 화면 캡처(글자 인식·Zoom 공유)에는 잡히지 않게 한다
+  warnWin.setIgnoreMouseEvents(true);
+  warnWin.setContentProtection(true);
+  warnWin.loadFile(path.join(__dirname, '../renderer/warning.html'));
+  warnWin.once('ready-to-show', () => { if (warnWin && !warnWin.isDestroyed()) warnWin.showInactive(); });
+  // 어떤 경우에도 계속 남아 있지 않게 한다
+  warnTimer = setTimeout(hideWarning, 60000);
+}
+function hideWarning() {
+  clearTimeout(warnTimer);
+  if (warnWin && !warnWin.isDestroyed()) warnWin.destroy();
+  warnWin = null;
 }
 
 async function stopShare() {
@@ -126,6 +154,7 @@ ipcMain.handle('videos-play', async (_e, id) => {
   const videoId = extractVideoId(v.url);
   const start = v.start !== null && v.start !== undefined ? v.start : extractStartSeconds(v.url);
   pendingSharePlay = true;
+  showWarning();
   openPlayer(videoId, start, v.end);
   return { ok: true };
 });
@@ -162,10 +191,12 @@ async function sharePlay() {
   if (zoomBusy) return { ok: false, message: 'Zoom 작업이 진행 중입니다.' };
   playerCommand('pause');
   zoomBusy = true;
+  showWarning();
   sendToControl('zoom-status', { state: 'starting' });
   const r = await runZoom('start');
   zoomBusy = false;
   if (!r.ok || !r.sharing) {
+    hideWarning();
     sendToControl('zoom-status', { state: 'error', message: r.message || '공유를 시작하지 못했습니다.', manual: true });
     return r;
   }
@@ -197,7 +228,9 @@ ipcMain.on('player-status', (_e, status) => {
   if (status.state === 'ready') playerReady = true;
   sendToControl('player-status', status);
   if (status.state === 'ready' && pendingSharePlay) { pendingSharePlay = false; sharePlay(); }
-  if (status.state === 'error') pendingSharePlay = false;
+  if (status.state === 'error') { pendingSharePlay = false; hideWarning(); }
+  // 영상이 실제로 재생되기 시작하면 경고 띠를 내린다
+  if (status.state === 'playing' && !zoomBusy) hideWarning();
   // 영상이 끝나면 앱이 시작한 공유를 자동으로 멈춘다 (카메라 화면으로 복귀)
   if (status.state === 'ended' && sharedByApp) stopShare();
   // 자동 테스트: 준비되면 재생, 끝나면 종료
